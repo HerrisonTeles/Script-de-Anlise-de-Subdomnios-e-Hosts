@@ -1,48 +1,71 @@
-# Análise de Subdomínios e Hosts
+# domain-parser
 
-## Sobre
+Script em Bash para extração e análise de domínios a partir de páginas HTML. Útil para reconhecimento passivo, auditoria de segurança e detecção de injeções maliciosas em sites.
 
-Este é um script bash simples para realizar a análise de subdomínios e hosts em um site específico. O script faz uso do comando `wget` para baixar o conteúdo da página web e, em seguida, extrai os URLs para identificar os subdomínios e hosts associados.
+## O que faz
 
-## Como Usar
+- Baixa uma página web via `wget`
+- Extrai todos os domínios referenciados nos atributos `href`
+- Mostra o contexto HTML de onde cada domínio foi extraído (número da linha e trecho do código)
+- Resolve o endereço IP de cada domínio via `dig` ou `host`
 
-### 1. Execução do Script
+## Caso de uso real
+
+Durante um teste com o site de uma prefeitura brasileira, o script identificou dois domínios de cassino/apostas (`casino.unoregler.com` e `rocketpot.io`) injetados no HTML via plugin WordPress comprometido:
+
+```html
+<div class="wpseoinj-block" data-wpseoinj-id="1">
+    <a href="https://rocketpot.io/" target="_blank" rel="noopener">...</a>
+</div>
+```
+
+Essa técnica é conhecida como **SEO Poisoning** ou **Black Hat SEO Injection**: links ocultos são inseridos em sites de alta autoridade (como `.gov.br`) para manipular o ranking de busca do Google em favor de sites maliciosos. O bloco é invisível para visitantes humanos, mas rastreado normalmente por bots de busca.
+
+## Dependências
+
+- `wget`
+- `dig` (pacote `dnsutils`) — preferencial
+- `host` — usado como fallback se `dig` não estiver disponível
+
+## Uso
 
 ```bash
-./parshing.sh
+chmod +x parser.sh
+./parser.sh
+```
 
+O script solicita a URL interativamente:
 
-2. Entrada do Usuário
-O script solicitará ao usuário que insira o endereço (URL) do site que deseja analisar.
+```
+=== PARSING DE DOMINIOS ===
+Digite o endereco para buscar os dominios-host:
+https://exemplo.mg.gov.br
+```
 
-3. Download da Página Web
-Utiliza o comando wget para baixar o conteúdo da página web especificada pelo usuário e salva-o como index.html.
+## Exemplo de saída
 
-4. Extração de URLs
-Utiliza grep para extrair URLs da página HTML. Usa cut para obter apenas os domínios. Utiliza sort -u para ordenar e remover duplicatas. A lista resultante é salva no arquivo lista.
+```
+========================================
+ DOMINIOS, CONTEXTO E IPs
+========================================
 
-5. Exibição de Domínios e Hosts Encontrados
-O script exibe a lista de domínios e hosts encontrados na página.
+[DOMINIO] casino.unoregler.com
+----------------------------------------
+[CONTEXTO]
+  linha 1635: <div class="wpseoinj-block" data-wpseoinj-id="1"><p><a href="https://casino.unoregler.com/...
+[IP] 104.21.37.93
+----------------------------------------
 
-6. Busca de Endereços IP
-Um loop while read é usado para iterar sobre cada linha da lista de domínios e hosts (lista). Para cada domínio, o script usa o comando host para obter os endereços IP correspondentes. Utiliza grep para filtrar as linhas que contêm "has address", exibindo os endereços IP.
+[DOMINIO] cdnjs.cloudflare.com
+----------------------------------------
+[CONTEXTO]
+  linha 12: <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+[IP] 104.17.25.14
+----------------------------------------
+```
 
-7. Remoção de Arquivos Temporários
-Remove os arquivos temporários criados durante o processo.
+## Observações
 
-Requisitos
-O script requer o comando wget para baixar a página web.
-Certifique-se de ter as permissões adequadas para executar o script (chmod +x parshing.sh).
-Exemplo de Saída
-
-PARSING
-Digite o endereço para buscar os domínios-host
-https://example.com
-Domínios e hosts encontrados:
-example.com
-subdomain1.example.com
-subdomain2.example.com
-Endereços IP dos domínios e hosts:
-example.com has address 93.184.216.34
-subdomain1.example.com has address 192.168.1.1
-subdomain2.example.com has address 192.168.1.2
+- O script não realiza nenhuma requisição além do `wget` inicial — é uma análise passiva do HTML
+- Arquivos temporários são criados com `mktemp` e removidos automaticamente ao final via `trap EXIT`
+- A saída não usa emojis ou caracteres UTF-8 especiais para garantir compatibilidade com qualquer terminal
