@@ -68,4 +68,3 @@ https://exemplo.mg.gov.br
 
 - O script não realiza nenhuma requisição além do `wget` inicial — é uma análise passiva do HTML
 - Arquivos temporários são criados com `mktemp` e removidos automaticamente ao final via `trap EXIT`
-- A saída não usa emojis ou caracteres UTF-8 especiais para garantir compatibilidade com qualquer terminal
