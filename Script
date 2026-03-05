@@ -1,24 +1,67 @@
 #!/bin/bash
 
-echo "PARSING"
-echo "Digite o endereço para buscar os domínios-host"
-read url
+echo "=== PARSING DE DOMINIOS ==="
+echo "Digite o endereco para buscar os dominios-host:"
+read -r url
 
-# Baixa a página web
-wget -q $url -O index.html
+if [[ -z "$url" ]]; then
+    echo "ERRO: nenhuma URL fornecida." >&2
+    exit 1
+fi
 
-# Extrai os URLs da página HTML
-grep -Eo 'href="http[s]?://[^/"]+' index.html | cut -d "/" -f 3 | sort -u > lista
+if [[ ! "$url" =~ ^https?:// ]]; then
+    echo "AVISO: URL sem protocolo. Adicionando https://"
+    url="https://$url"
+fi
 
-# Exibe os domínios e hosts encontrados
-echo "Domínios e hosts encontrados:"
-cat lista
+tmp_html=$(mktemp /tmp/parse_XXXXXX.html)
+tmp_lista=$(mktemp /tmp/parse_XXXXXX.txt)
 
-# Busca os endereços IP dos domínios e hosts
-echo "Endereços IP dos domínios e hosts:"
+trap "rm -f '$tmp_html' '$tmp_lista'" EXIT
+
+echo "Baixando $url ..."
+if ! wget -q --timeout=10 "$url" -O "$tmp_html"; then
+    echo "ERRO: falha ao baixar a URL." >&2
+    exit 1
+fi
+
+grep -Eo 'href="https?://[^/"]+' "$tmp_html" \
+    | grep -Eo 'https?://[^/"]+' \
+    | sed 's|https\?://||' \
+    | sort -u > "$tmp_lista"
+
+echo ""
+echo "========================================"
+echo " DOMINIOS, CONTEXTO E IPs"
+echo "========================================"
+
 while read -r domain; do
-    host $domain | grep "has address"
-done < lista
+    [[ -z "$domain" ]] && continue
 
-# Remove o arquivo temporário
-rm index.html lista
+    echo ""
+    echo "[DOMINIO] $domain"
+    echo "----------------------------------------"
+
+    echo "[CONTEXTO]"
+    grep -n "$domain" "$tmp_html" | while read -r linha; do
+        lineno=$(echo "$linha" | cut -d: -f1)
+        conteudo=$(echo "$linha" | cut -d: -f2- \
+            | sed 's/^[[:space:]]*//' \
+            | cut -c1-120)
+        echo "  linha $lineno: $conteudo"
+    done
+
+    if command -v dig &>/dev/null; then
+        ip=$(dig +short "$domain" A 2>/dev/null | head -1)
+    else
+        ip=$(host "$domain" 2>/dev/null | awk '/has address/ {print $4; exit}')
+    fi
+
+    if [[ -n "$ip" ]]; then
+        echo "[IP] $ip"
+    else
+        echo "[IP] sem resolucao"
+    fi
+
+    echo "----------------------------------------"
+done < "$tmp_lista"
